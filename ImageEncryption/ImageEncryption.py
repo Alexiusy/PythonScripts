@@ -1,60 +1,65 @@
-#coding:utf-8
+#coding:utf8
 
-__author__ = "Zeaconeus"
+__author__ = "Zeacone"
 __version__ = "1.0"
 
 from PIL import Image
 
-def hidden_message(image, message):
+"""
+Encryption
+"""
+
+def encryptionMessage(image, message):
+	image_data = image.getdata()
 	message_length = len(message)
-    if message_length == 0:
-		raise ValueError('There is no message!')
-    if message_length * 3 > len(image.getdata()):
-        raise ValueError('The message is too long to hidden in image.')
+	if message_length == 0:
+		raise ValueError('No message.')
+	if message_length * 3 > len(image_data):
+		raise ValueError('Message is too long.')
 
-    # 获取图片数据，保存在迭代器之中
-    image_data = iter(image.getdata())
+	# Put image data into an iterator.
+	image_data_iterator = iter(image_data)
 
-    for i in xrange(message_length):
-        binaryCode = ord(message[i])
-        # 将三组RGB数值（即三个像素一组）生成一个迭代器
-        container = [RGB & ~1 for RGB in image_data.next()[:3] + image_data.next()[:3] + image_data.next()[:3]]
-        
-        # 最多八步即可将可显示的ASCII码完全转化为二进制，将RGB迭代器前8位作为标识位
-        for j in xrange(7, -1, -1):
-            # 奇数 & 1 == 1， 偶数 & 1 == 0。
-            # 偶数 | 1 == 奇数（偶数 + 1）， 偶数 | 0 == 偶数。
-            # 因此此处能够区分字符ASCII码的二进制，通过判断RGB值的奇偶即可得出二进制数字串
-             container[j] |= (binaryCode & 1) 
-             binaryCode >>= 1
+	for i in xrange(message_length):
+		ASCII = ord(message[i])
 
-         # 需要隐藏的信息结束，在RGB值设置结束标志位，便于解密时判断。
-        if i == message_length - 1:
-             container[-1] |= 1
+		# Eight bits binary code present one character, so we need three pixels to save one character.
+		# Serilize all rgb number to be even(Simply make first bit be 0).
+		container = [rgb & ~1 for rgb in image_data_iterator.next()[:3] + image_data_iterator.next()[:3] + image_data_iterator.next()[:3]]
 
-        container = tuple(container)
-        yield container[0:3]
-        yield container[3:6]
-        yield container[6:9]
+		# Only eight steps to convert a decimal number to binary.
+		# ① odd & 1 = 1, even & 1 = 0, get 0 or 1; ② even | 1 = even + 1, even | 0 = even, get an decimal number.
+		for j in xrange(7, -1, -1):
+			container[j] |= (ASCII & 1)
+			ASCII >>= 1
 
-def new_image(image, message):
-    width, height = image.size
-    (x, y) = (0, 0)
-    for pixel in hidden_message(image, message):
-        image.putpixel((x, y), pixel)
-        if x == width - 1:
-            x = 0
-            y += 1
-        else:
-            x += 1
-    return image
+		# The ninth bit is empty, so we can put finish flag into it.
+		if i == message_length - 1:
+			container[-1] |= 1
+
+		container = tuple(container)
+		yield container[0:3]
+		yield container[3:6]
+		yield container[6:9]
+
+def resaveImage(image, message):
+	width, height = image.size
+	(x, y) = (0, 0)
+	for pixel in encryptionMessage(image, message):
+		image.putpixel((x, y), pixel)
+		if x == width - 1:
+			x = 0
+			y += 1
+		else:
+			x += 1
+	return image
 
 
-# 解密部分：
-    # 1.按照加密时的方法反向解密数据
-    # 2.拼接字符，完成信息的解密
+"""
+Decryption
+"""
 
-def get_charactor(image):
+def getCharacter(image):
     image_data = iter(image.getdata())
     while True:
         binaryCode = 0
@@ -64,27 +69,13 @@ def get_charactor(image):
             binaryCode <<= 1
         binaryCode |= pixels[7] & 1
 
-        # 返回字符生成器
+        # Return character generater.
         yield chr(binaryCode)
 
-        # 结束标识
+        # Finish flag.
         if pixels[-1] & 1:
             break
 
-def get_message(image):
-    return ''.join(get_charactor(image))
+def getMessage(image):
+    return ''.join(getCharacter(image))
 
-image = Image.open('batman.png').convert('RGB')
-new_image = new_image(image, '1234423')
-new_image.save('batman1.png')
-
-crypt_image = Image.open('batman1.png').convert('RGB')
-# print get_message(crypt_image)
-
-f = open('message.txt', 'w')
-f.write(get_message(crypt_image))
-f.close()
-f = open('message.txt')
-files = f.readlines()
-print files
-f.close()
