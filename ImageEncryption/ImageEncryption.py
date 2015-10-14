@@ -77,5 +77,5 @@ def getCharacter(image):
             break
 
 def getMessage(image):
-    return ''.join(getCharacter(image))
+	return ''.join(getCharacter(image))
 
